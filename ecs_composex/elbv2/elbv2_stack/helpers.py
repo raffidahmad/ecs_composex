@@ -426,21 +426,26 @@ def add_extra_certificate(listener_stack, listener, cert_arn):
     :param listener_stack: The stack that "owns" the listener.
     :param listener: The listener to add the certificate to
     :param cert_arn: The identifier of the certificate
+    :raises ValueError: If certificate value is not valid
     """
     cert_arn_re = re.compile(
         r"((?:^arn:aws(?:-[a-z]+)?:acm:[\S]+:[0-9]+:certificate/)"
         r"([a-z0-9]{8}(?:-[a-z0-9]{4}){3}-[a-z0-9]{12})$)"
     )
+
+    if not isinstance(cert_arn, str):
+        raise ValueError(
+            f"{listener_stack.title} - Certificate value must be a string, got {type(cert_arn)}"
+        )
+
     if cert_arn_re.match(cert_arn):
         cert_arn_id = cert_arn
-    elif isinstance(cert_arn, str) and cert_arn.find(ACM_KEY) < 0:
+    elif ACM_KEY not in cert_arn:
         cert_arn_id = f"{ACM_KEY}::{cert_arn}"
-    elif isinstance(cert_arn, str) and cert_arn.find(ACM_KEY):
-        cert_arn_id = cert_arn
     else:
-        raise ValueError(
-            f"{listener_stack.title} - Certificate value is not valid", cert_arn
-        )
+        cert_arn_id = cert_arn
+
+    # Add certificate to listener
     if hasattr(listener, "Certificates") and listener.Certificates:
         add_listener_certificate_via_arn(
             listener_stack, listener, cert_arn_id, cert_arn
@@ -476,20 +481,31 @@ def import_new_acm_certs(listener, src_name, settings, listener_stack):
     """
     Function to Import an ACM Certificate defined in x-acm
 
-    :param listener:
-    :param src_name:
-    :param settings:
-    :param listener_stack:
-    :return:
+    :param listener: The ELB listener to attach the certificate to
+    :param str src_name: Name of the certificate in x-acm configuration
+    :param ecs_composex.common.settings.ComposeXSettings settings: Settings containing compose content
+    :param listener_stack: Stack containing the listener
+    :raises: LookupError if x-acm is not defined in compose file
+    :raises: ValueError if certificate name is not found in x-acm configuration
     """
+    if not hasattr(settings, 'compose_content'):
+        raise AttributeError("Settings object has no compose_content attribute")
+
     if not keyisset(ACM_KEY, settings.compose_content):
         raise LookupError(f"There is no {ACM_KEY} defined in your docker-compose files")
+
     if not keyisset(src_name, settings.compose_content[ACM_KEY]):
         raise ValueError(
             f"{listener_stack.title} - {ACM_KEY} - no certificate {src_name} found"
         )
-    add_extra_certificate(listener_stack, listener, src_name)
-    upgrade_listener_to_use_tls(listener)
+
+    try:
+        add_extra_certificate(listener_stack, listener, src_name)
+        upgrade_listener_to_use_tls(listener)
+    except Exception as error:
+        raise ValueError(
+            f"Failed to add certificate {src_name} to listener: {str(error)}"
+        ) from error
 
 
 def handle_import_cognito_pool(

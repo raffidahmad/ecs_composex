@@ -26,6 +26,8 @@ from ecs_composex.elbv2.elbv2_stack.helpers import (
     import_cognito_pool,
     map_service_target,
     validate_duplicate_targets,
+    add_acm_certs_arn,
+    import_new_acm_certs
 )
 from ecs_composex.resources_import import import_record_properties
 
