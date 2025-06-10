@@ -251,6 +251,7 @@ def handle_services_lb_listeners(
     # Configure existing (lookup) listeners
     for listener_port, listener in load_balancer.lookup_listeners.items():
         listener.map_lb_target_groups_service_to_listener_targets(load_balancer)
+        listener.handle_certificates(settings, res_root_stack)
         listener.handle_cognito_pools(settings, res_root_stack)
         listener.define_new_rules(load_balancer, template)
 
