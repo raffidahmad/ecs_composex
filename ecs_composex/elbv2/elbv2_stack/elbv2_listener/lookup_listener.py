@@ -26,6 +26,8 @@ from ecs_composex.elbv2.elbv2_stack.helpers import (
     import_cognito_pool,
     map_service_target,
     validate_duplicate_targets,
+    add_acm_certs_arn,
+    import_new_acm_certs
 )
 from ecs_composex.resources_import import import_record_properties
 
@@ -192,6 +194,33 @@ class LookupListener:
                 pool_params = import_cognito_pool(pool_id, settings, listener_stack)
                 target[cognito_auth_key]["UserPoolArn"] = pool_params[1]
                 target[cognito_auth_key]["UserPoolDomain"] = pool_params[2]
+
+    def handle_certificates(self, settings, listener_stack):
+        """
+        Method to handle certificates
+
+        :param ecs_composex.common.settings.ComposeXSettings settings:
+        :param listener_stack: The stack that has the listener as resource
+        """
+        if not keyisset("Certificates", self.definition):
+            LOG.warning(f"No certificates defined for Listener {self.name}")
+            return
+        valid_sources = [
+            ("x-acm", str, import_new_acm_certs),
+            ("Arn", str, add_acm_certs_arn),
+            ("CertificateArn", str, add_acm_certs_arn),
+        ]
+        for cert_def in self.definition["Certificates"]:
+            if isinstance(cert_def, dict):
+                cert_source = list(cert_def.keys())[0]
+                source_value = cert_def[cert_source]
+                for src_type in valid_sources:
+                    if (
+                        src_type[0] == cert_source
+                        and isinstance(source_value, src_type[1])
+                        and src_type[2]
+                    ):
+                        src_type[2](self, source_value, settings, listener_stack)
 
     def map_lb_target_groups_service_to_listener_targets(self, lb: Elbv2) -> None:
         """
